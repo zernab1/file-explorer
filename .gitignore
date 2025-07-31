@@ -1,0 +1,28 @@
+# Build files
+bin/
+obj/
+
+# User files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# OS stuff
+.DS_Store
+Thumbs.db
+
+# Visual Studio
+.vs/
+
+# Runtime
+*.exe
+*.dll
+*.pdb
+
+# Logs
+*.log
+
+# Other
+*.db
+*.cache

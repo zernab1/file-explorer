@@ -1,0 +1,34 @@
+﻿<body>
+    <h1>File Explorer</h1>
+    <ul id="file-list"></ul>
+
+    <script>
+        async function fetchDirectory(path = '') {
+            const res = await fetch(`/api/fileexplorer/${path}`);
+            console.log("Fetching:", `/api/fileexplorer/${path}`); // checking if URL path is beign fetched
+            if (!res.ok) {
+                document.getElementById('file-list').innerHTML = '<li>Error loading directory</li>';
+                return;
+            }
+            const data = await res.json();
+            const list = document.getElementById('file-list');
+            list.innerHTML = '';
+
+            data.Directories.forEach(dir => {
+                const li = document.createElement('li');
+                li.innerHTML = `<strong>[DIR]</strong> <a href="?path=${encodeURIComponent(dir)}">${dir}</a>`;
+                list.appendChild(li);
+            });
+
+            data.Files.forEach(file => {
+                const li = document.createElement('li');
+                li.textContent = `${file.Name} (${file.Size} bytes)`;
+                list.appendChild(li);
+            });
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentPath = urlParams.get('path') || '';
+        fetchDirectory(currentPath);
+    </script>
+</body>

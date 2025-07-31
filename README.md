@@ -1,0 +1,1 @@
+This project was developed using VS Code on my Mac with .NET 8. However, it should work in Visual Studio 2022+, though might need to do a "dotnet restore".
