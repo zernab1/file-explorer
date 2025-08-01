@@ -52,5 +52,72 @@ namespace FileExplorerApp.Controllers
                 TotalSizeBytes = files.Sum(f => f.Size)
             });
         }
+
+        [HttpGet("download")]
+        public IActionResult Download([FromQuery] string path)
+        {
+            var fullPath = Path.GetFullPath(Path.Combine(_homeDirectory, path ?? string.Empty));
+            if (!fullPath.StartsWith(Path.GetFullPath(_homeDirectory)) || !System.IO.File.Exists(fullPath))
+                return NotFound();
+
+            var contentType = "application/octet-stream"; // look into MIME mapping in .NET...
+            var fileName = Path.GetFileName(fullPath);
+            return PhysicalFile(fullPath, contentType, fileName);
+        }
+
+        [HttpPost("upload")]
+        public async Task<IActionResult> Upload([FromForm] string path, [FromForm] IFormFile file)
+        {
+            var fullPath = Path.GetFullPath(Path.Combine(_homeDirectory, path ?? string.Empty));
+            if (!fullPath.StartsWith(Path.GetFullPath(_homeDirectory)) || !Directory.Exists(fullPath))
+                return BadRequest("Invalid upload path.");
+
+            if (file == null || file.Length == 0)
+                return BadRequest("No file uploaded.");
+
+            var filePath = Path.Combine(fullPath, file.FileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            return Ok("File uploaded successfully!");
+        }
+
+        [HttpDelete("delete")]
+        public IActionResult Delete([FromQuery] string path)
+        {
+            _logger.LogInformation($"Delete request received for path: {path}");
+
+            var fullPath = Path.GetFullPath(Path.Combine(_homeDirectory, path ?? string.Empty));
+
+            if (!fullPath.StartsWith(Path.GetFullPath(_homeDirectory)))
+                return BadRequest("Access denied.");
+
+            try
+            {
+                if (System.IO.File.Exists(fullPath))
+                {
+                    System.IO.File.Delete(fullPath);
+                    return Ok("File deleted.");
+                }
+                else if (Directory.Exists(fullPath))
+                {
+                    Directory.Delete(fullPath, true);
+                    return Ok("Directory deleted.");
+                }
+                else
+                {
+                    return NotFound("File or directory not found.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to delete path: " + fullPath);
+                return StatusCode(500, $"Internal server error: {ex.Message}");
+            }
+
+        }
     }
 }

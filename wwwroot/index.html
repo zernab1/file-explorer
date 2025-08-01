@@ -22,6 +22,10 @@
 
 <body>
     <h1>File Explorer</h1>
+    <form id="upload-form">
+        <input type="file" id="file-input" name="file" />
+        <button type="submit">Upload</button>
+    </form>
     <div id="path"></div>
     <div id="contents"></div>
 
@@ -30,8 +34,10 @@
         let currentPath = "/";
 
         const Icons = {
-            folder: "📁",
-            file: "📄"
+            folder: "📂",
+            file: "📄",
+            download: "📥",
+            upload: "📤"
         };
 
         function formatBytes(bytes) {
@@ -60,7 +66,7 @@
                 renderBreadcrumbs(path);
 
                 data.directories.forEach(dir => {
-                    $("<div>")
+                    const $folderDiv = $("<div>")
                         .addClass("directory item folder")
                         .css("cursor", "pointer")
                         .text(`${Icons.folder} ${dir.name}`)
@@ -69,8 +75,31 @@
                             history.pushState({ path: newPath }, "", `/?path=${encodeURIComponent(newPath)}`);
                             currentPath = newPath;
                             loadDirectory(newPath);
-                        })
-                        .appendTo($contents);
+                        });
+
+                    const $deleteFolderBtn = $("<button>")
+                        .text("Delete")
+                        .css({ marginLeft: "0.5rem", color: "red" })
+                        .on("click", (e) => {
+                            e.stopPropagation();
+                            if (confirm(`Delete folder "${dir.name}" and its contents?`)) {
+                                const deletePath = path ? `${path}/${dir.name}` : dir.name;
+                                $.ajax({
+                                    url: `/api/fileexplorer/delete?path=${encodeURIComponent(deletePath)}`,
+                                    type: "DELETE",
+                                    success: () => {
+                                        loadDirectory(currentPath);
+                                    },
+                                    error: (xhr) => {
+                                        alert("Delete failed: " + xhr.responseText);
+                                    }
+                                });
+                            }
+                        });
+
+                    $folderDiv.append($deleteFolderBtn);
+                    $folderDiv.appendTo($contents);
+
                 });
 
                 data.files.forEach(file => {
@@ -78,6 +107,35 @@
                         .addClass("item")
                         .text(`${Icons.file} ${file.name} (${formatBytes(file.size)})`);
 
+                    const $downloadBtn = $("<button>")
+                        .text(`${Icons.download}`)
+                        .css({ marginLeft: "1rem" })
+                        .on("click", () => {
+                            const downloadPath = path ? `${path}/${file.name}` : file.name;
+                            window.location.href = `/api/fileexplorer/download?path=${encodeURIComponent(downloadPath)}`;
+                        });
+
+                    const $deleteBtn = $("<button>")
+                        .text("Delete")
+                        .css({ marginLeft: "0.5rem", color: "red" })
+                        .on("click", () => {
+                            if (confirm(`Delete file "${file.name}"?`)) {
+                                const deletePath = path ? `${path}/${file.name}` : file.name;
+                                $.ajax({
+                                    url: `/api/fileexplorer/delete?path=${encodeURIComponent(deletePath)}`,
+                                    type: "DELETE",
+                                    success: () => {
+                                        loadDirectory(currentPath);
+                                    },
+                                    error: (xhr) => {
+                                        alert("Delete failed: " + xhr.responseText);
+                                    }
+                                });
+                            }
+                        });
+
+                    $fileDiv.append($deleteBtn);
+                    $fileDiv.append($downloadBtn);
                     $fileDiv.appendTo($contents);
                 });
 
@@ -125,8 +183,45 @@
             const params = new URLSearchParams(window.location.search);
             const initialPath = params.get("path") || "";
             loadDirectory(initialPath);
+
+            window.onpopstate = function (event) {
+                const path = event.state?.path || "";
+                loadDirectory(path);
+            };
         });
 
+        $('#upload-form').on('submit', function (e) {
+            e.preventDefault();
+
+            const fileInput = $('#file-input')[0];
+            if (fileInput.files.length === 0) return;
+
+            let uploadPath = currentPath;
+            if (!uploadPath || uploadPath === "/") {
+                uploadPath = "."; // telling backend this is the root directory
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('path', uploadPath);
+
+            $.ajax({
+                url: '/api/fileexplorer/upload',
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function () {
+                    alert('Upload successful!');
+                    loadDirectory(currentPath);
+                },
+                error: function (xhr) {
+                    alert('Upload failed: ' + xhr.responseText);
+
+
+                }
+            });
+        });
     </script>
 </body>
 
