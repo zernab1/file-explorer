@@ -13,11 +13,13 @@ namespace FileExplorerApp {
 
             // Configure the HTTP request pipeline.
 
+            app.UseDefaultFiles(); // allows "/" to redirect to index.html
+
             app.UseHttpsRedirection();
 
             app.UseStaticFiles();
             
-            app.UseRouting();
+            app.UseRouting(); // also adding this middleware to allow for "/" root usage instead of /index.html
 
             app.MapControllers();
 

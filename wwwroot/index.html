@@ -1,34 +1,133 @@
-﻿<body>
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>File Explorer</title>
+    <style>
+        body {
+            font-family: sans-serif;
+        }
+
+        .item {
+            margin: 0.5rem 0;
+            cursor: pointer;
+        }
+
+        .folder {
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
     <h1>File Explorer</h1>
-    <ul id="file-list"></ul>
+    <div id="path"></div>
+    <div id="contents"></div>
 
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script>
-        async function fetchDirectory(path = '') {
-            const res = await fetch(`/api/fileexplorer/${path}`);
-            console.log("Fetching:", `/api/fileexplorer/${path}`); // checking if URL path is beign fetched
-            if (!res.ok) {
-                document.getElementById('file-list').innerHTML = '<li>Error loading directory</li>';
-                return;
-            }
-            const data = await res.json();
-            const list = document.getElementById('file-list');
-            list.innerHTML = '';
+        let currentPath = "/";
 
-            data.Directories.forEach(dir => {
-                const li = document.createElement('li');
-                li.innerHTML = `<strong>[DIR]</strong> <a href="?path=${encodeURIComponent(dir)}">${dir}</a>`;
-                list.appendChild(li);
-            });
+        const Icons = {
+            folder: "📁",
+            file: "📄"
+        };
 
-            data.Files.forEach(file => {
-                const li = document.createElement('li');
-                li.textContent = `${file.Name} (${file.Size} bytes)`;
-                list.appendChild(li);
+        function formatBytes(bytes) {
+            const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+            if (bytes === 0) return "0 Bytes";
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            const size = bytes / Math.pow(1024, i);
+            return `${size.toFixed(2)} ${sizes[i]}`;
+        }
+
+        function loadDirectory(path = "") {
+            currentPath = path || "/";
+            const apiPath = currentPath === "/" ? "" : currentPath;
+
+            $.getJSON(`/api/fileexplorer/${apiPath}`, function (data) {
+                $("#path").text(`Path: ${data.path}`);
+
+                const $contents = $("#contents");
+                $contents.empty();
+
+                $("<div>")
+                    .css("margin-bottom", "1rem")
+                    .text(`${Icons.file} ${data.fileCount} files, ${Icons.folder} ${data.folderCount} folders, ${formatBytes(data.totalSizeBytes)} total`)
+                    .appendTo($contents);
+
+                renderBreadcrumbs(path);
+
+                data.directories.forEach(dir => {
+                    $("<div>")
+                        .addClass("directory item folder")
+                        .css("cursor", "pointer")
+                        .text(`${Icons.folder} ${dir.name}`)
+                        .on("click", () => {
+                            const newPath = path === "" || path === "/" ? dir.name : `${path}/${dir.name}`;
+                            history.pushState({ path: newPath }, "", `/?path=${encodeURIComponent(newPath)}`);
+                            currentPath = newPath;
+                            loadDirectory(newPath);
+                        })
+                        .appendTo($contents);
+                });
+
+                data.files.forEach(file => {
+                    const $fileDiv = $("<div>")
+                        .addClass("item")
+                        .text(`${Icons.file} ${file.name} (${formatBytes(file.size)})`);
+
+                    $fileDiv.appendTo($contents);
+                });
+
+            }).fail(() => {
+                $("#contents").html("<div>Error loading directory.</div>");
             });
         }
 
-        const urlParams = new URLSearchParams(window.location.search);
-        const currentPath = urlParams.get('path') || '';
-        fetchDirectory(currentPath);
+        function renderBreadcrumbs(path) {
+            path = path.replace(/^\/|\/$/g, "");
+            const $pathDiv = $("#path");
+            $pathDiv.empty();
+
+            const $home = $("<span>")
+                .addClass("breadcrumb")
+                .css("cursor", "pointer")
+                .text("Home")
+                .on("click", () => {
+                    history.pushState({ path: "/" }, "", "/");
+                    loadDirectory("/");
+                });
+
+            $pathDiv.append($home);
+
+            if (path) {
+                const parts = path.split("/");
+                let combinedPath = "";
+                parts.forEach((part, idx) => {
+                    combinedPath += (idx === 0 ? "" : "/") + part;
+                    $pathDiv.append(" / ");
+                    const $crumb = $("<span>")
+                        .addClass("breadcrumb")
+                        .css("cursor", "pointer")
+                        .text(part)
+                        .on("click", () => {
+                            history.pushState({ path: combinedPath }, "", `/?path=${encodeURIComponent(combinedPath)}`);
+                            loadDirectory(combinedPath);
+                        });
+                    $pathDiv.append($crumb);
+                });
+            }
+        }
+
+        $(document).ready(() => {
+            const params = new URLSearchParams(window.location.search);
+            const initialPath = params.get("path") || "";
+            loadDirectory(initialPath);
+        });
+
     </script>
 </body>
+
+</html>
