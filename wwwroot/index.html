@@ -18,13 +18,13 @@
             font-weight: bold;
         }
 
-        .selected-folder {
+        .selected {
             background-color: #c9ebf6;
             border-radius: 4px;
             padding: 0.25rem;
         }
 
-        .move-folder:hover {
+        .selected-folder:hover {
             background-color: #e0e9ed;
         }
     </style>
@@ -43,7 +43,7 @@
     <script>
         /// Constant and Global variables ///
         let currentPath = "/";
-        let itemToMove = null;
+        let itemToMove, itemToCopy, selectedItemPath = null;
 
         const Icons = {
             folder: "📂",
@@ -60,21 +60,32 @@
             return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
         }
 
-        function clearSelection() {
-            $(".move-folder").removeClass("selected-folder");
-            $("#confirm-move").prop("disabled", true).removeData("destPath");
+        function clearModalSelection() {
+            $(".selected-folder").removeClass("selected");
+            $("#confirm-modal").prop("disabled", true).removeData("destPath");
+        }
+
+        function clearAllSelection() {
+            clearModalSelection();
+            $(".item").removeClass("selected");
+            selectedItemPath = null;
         }
 
         function joinPaths(a, b) {
             return `${a.replace(/\/+$/, '')}/${b.replace(/^\/+/, '')}`;
         }
 
+        function highlightSelection($element, path) {
+            $('.item').removeClass('selected');
+            $element.addClass('selected');
+            selectedItemPath = path;
+        }
+
         /// Directory Rendering ///
         function loadDirectory(path = "") {
             currentPath = path || "/";
-            const apiPath = currentPath === "/" ? "" : currentPath;
-
-            $.getJSON(`/api/fileexplorer/${apiPath}`, function (data) {
+            const url = joinPaths("/api/fileexplorer", path === "/" ? "" : path);
+            $.getJSON(url, function (data) {
                 $("#path").text(`Path: ${data.path}`);
 
                 const $contents = $("#contents").empty();
@@ -94,8 +105,10 @@
 
         function renderFolders(folders, path, $container) {
             folders.forEach(dir => {
+                const fullPath = joinPaths(path, dir.name);
+
                 const $folderDiv = $("<div>")
-                    .addClass("directory item folder")
+                    .addClass("item folder selected-folder")
                     .css("cursor", "pointer")
                     .text(`${Icons.folder} ${dir.name}`)
                     .on("click", () => {
@@ -110,9 +123,9 @@
                     .css({ marginLeft: "0.5rem", color: "red" })
                     .on("click", (e) => {
                         e.stopPropagation();
+                        highlightSelection($folderDiv, fullPath);
                         if (confirm(`Delete folder "${dir.name}" and all its contents?`)) {
-                            const deletePath = path ? `${path}/${dir.name}` : dir.name;
-                            deleteItem(deletePath);
+                            deleteItem(fullPath);
                         }
                     });
 
@@ -121,17 +134,26 @@
                     .css({ marginLeft: "0.5rem" })
                     .on("click", (e) => {
                         e.stopPropagation();
-                        const fullPath = path ? `${path}/${dir.name}` : dir.name;
+                        highlightSelection($folderDiv, fullPath);
                         openMoveModal(fullPath);
                     });
 
-                $folderDiv.append($deleteFolderBtn, $moveFolderBtn).appendTo($container);
+                const $copyFolderBtn = $("<button>")
+                    .text("Copy")
+                    .css({ marginLeft: "0.5rem" })
+                    .on("click", (e) => {
+                        e.stopPropagation();
+                        highlightSelection($folderDiv, fullPath);
+                        openCopyModal(fullPath);
+                    });
+
+                $folderDiv.append($deleteFolderBtn, $moveFolderBtn, $copyFolderBtn).appendTo($container);
             });
         }
 
         function renderFiles(files, path, $container) {
             files.forEach(file => {
-                const fullPath = path ? `${path}/${file.name}` : file.name;
+                const fullPath = joinPaths(path, file.name);
 
                 const $fileDiv = $("<div>")
                     .addClass("item")
@@ -147,7 +169,9 @@
                 const $deleteBtn = $("<button>")
                     .text("Delete")
                     .css({ marginLeft: "0.5rem", color: "red" })
-                    .on("click", () => {
+                    .on("click", (e) => {
+                        e.stopPropagation();
+                        highlightSelection($fileDiv, fullPath);
                         if (confirm(`Delete file "${file.name}"?`)) {
                             deleteItem(fullPath);
                         }
@@ -156,9 +180,22 @@
                 const $moveBtn = $("<button>")
                     .text("Move")
                     .css({ marginLeft: "0.5rem" })
-                    .on("click", () => openMoveModal(fullPath));
+                    .on("click", (e) => {
+                        e.stopPropagation();
+                        highlightSelection($fileDiv, fullPath);
+                        openMoveModal(fullPath);
+                    });
 
-                $fileDiv.append($deleteBtn, $downloadBtn, $moveBtn).appendTo($container);
+                const $copyBtn = $("<button>")
+                    .text("Copy")
+                    .css({ marginLeft: "0.5rem" })
+                    .on("click", (e) => {
+                        e.stopPropagation();
+                        highlightSelection($fileDiv, fullPath);
+                        openCopyModal(fullPath);
+                    });
+
+                $fileDiv.append($deleteBtn, $downloadBtn, $moveBtn, $copyBtn).appendTo($container);
             });
         }
 
@@ -179,7 +216,7 @@
                 const parts = path.split("/");
                 parts.forEach((part, idx) => {
                     const partPath = parts.slice(0, idx + 1).join("/");
-                    $pathDiv.append(" / ");
+                    $pathDiv.append(" > ");
                     $("<span>")
                         .addClass("breadcrumb")
                         .css("cursor", "pointer")
@@ -243,9 +280,49 @@
         /// Move Functionality ///
         function openMoveModal(sourcePath) {
             itemToMove = sourcePath;
-            clearSelection();
-            $("#move-modal").show();
+            clearModalSelection();
+            $("#directory-modal").show();
             loadDestinationBrowser("/");
+        }
+
+        /// Copy Functionality ///
+        function openCopyModal(sourcePath) {
+            itemToCopy = sourcePath;
+            clearModalSelection();
+            $("#directory-modal").show();
+            loadDestinationBrowser("/");
+        }
+
+        function performCopyOrMove() {
+            const destPath = $("#confirm-modal").data("destPath");
+            if (itemToCopy) {
+                $.post(`/api/fileexplorer/copy?sourcePath=${encodeURIComponent(itemToCopy)}&destinationPath=${encodeURIComponent(destPath)}`)
+                    .done(() => {
+                        alert("Successfully Copied!");
+                        resetDirectoryModal();
+                        loadDirectory(currentPath);
+                    })
+                    .fail((xhr) => {
+                        alert("Copy failed: " + xhr.responseText);
+                    });
+            } else if (itemToMove) {
+                $.post(`/api/fileexplorer/move?sourcePath=${encodeURIComponent(itemToMove)}&destinationPath=${encodeURIComponent(destPath)}`)
+                    .done(() => {
+                        alert("Successfully Moved!");
+                        resetDirectoryModal();
+                        loadDirectory(currentPath);
+                    })
+                    .fail((xhr) => {
+                        alert("Move failed: " + xhr.responseText);
+                    });
+            }
+        }
+
+        function resetDirectoryModal() {
+            $("#directory-modal").hide();
+            itemToMove = null;
+            itemToCopy = null;
+            clearAllSelection();
         }
 
         function loadDestinationBrowser(path) {
@@ -259,7 +336,7 @@
                         .text("👈 Back ..")
                         .css("cursor", "pointer")
                         .on("click", () => {
-                            clearSelection();
+                            clearModalSelection();
                             loadDestinationBrowser(parentPath);
                         }).appendTo($browser);
                 }
@@ -268,16 +345,16 @@
                     const newPath = path === "/" ? dir.name : `${path}/${dir.name}`;
 
                     $("<div>")
-                        .addClass("move-folder")
+                        .addClass(".selected-folder")
                         .text(`📂 ${dir.name}`)
                         .css("cursor", "pointer")
                         .on("click", function () {
-                            $(".move-folder").removeClass("selected-folder");
-                            $(this).addClass("selected-folder");
-                            $("#confirm-move").prop("disabled", false).data("destPath", newPath);
+                            $(".selected-folder").removeClass("selected");
+                            $(this).addClass("selected");
+                            $("#confirm-modal").prop("disabled", false).data("destPath", newPath);
                         })
                         .on("dblclick", function () {
-                            clearSelection();
+                            clearModalSelection();
                             loadDestinationBrowser(newPath);
                         }).appendTo($browser);
                 });
@@ -295,35 +372,18 @@
                 loadDirectory(path);
             };
 
-            $("#cancel-move").on("click", () => {
-                $("#move-modal").hide();
-                itemToMove = null;
-            });
-
-            $("#confirm-move").on("click", () => {
-                const destPath = $("#confirm-move").data("destPath");
-                if (!itemToMove || !destPath) return;
-
-                $.post(`/api/fileexplorer/move?sourcePath=${encodeURIComponent(itemToMove)}&destinationPath=${encodeURIComponent(destPath)}`)
-                    .done(() => {
-                        alert("Successfully Moved!");
-                        $("#move-modal").hide();
-                        loadDirectory(currentPath);
-                    })
-                    .fail((xhr) => {
-                        alert("Move failed: " + xhr.responseText);
-                    });
-            });
+            $("#cancel-modal").on("click", () => resetDirectoryModal());
+            $("#confirm-modal").on("click", performCopyOrMove);
         });
     </script>
 
-    <div id="move-modal" style="display:none; position:fixed; top:10%; left:50%; transform:translateX(-50%);
-    background:white; border:1px solid #ccc; padding:1rem; z-index:9999; max-height:80vh; overflow:auto;">
+    <div id="directory-modal" style="display:none; position:fixed; top:10%; left:50%; transform:translateX(-50%);
+background:white; border:1px solid #ccc; padding:1rem; z-index:9999; max-height:80vh; overflow:auto;">
         <h3>Select Destination</h3>
         <div id="destination-browser"></div>
         <div style="margin-top:1rem;">
-            <button id="confirm-move">Move Here</button>
-            <button id="cancel-move">Cancel</button>
+            <button id="confirm-modal" disabled>Confirm</button>
+            <button id="cancel-modal">Cancel</button>
         </div>
     </div>
 </body>

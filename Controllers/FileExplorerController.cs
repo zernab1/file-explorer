@@ -163,5 +163,57 @@ namespace FileExplorerApp.Controllers
 
             return Ok();
         }
+
+        [HttpPost("copy")]
+        public IActionResult Copy([FromQuery] string sourcePath, [FromQuery] string destinationPath)
+        {
+            var sourceFullPath = Path.GetFullPath(Path.Combine(_homeDirectory, sourcePath));
+            var destinationDirectoryFullPath = Path.GetFullPath(Path.Combine(_homeDirectory, destinationPath));
+            var destinationFullPath = Path.Combine(destinationDirectoryFullPath, Path.GetFileName(sourceFullPath));
+
+            if (!sourceFullPath.StartsWith(_homeDirectory) || !destinationFullPath.StartsWith(_homeDirectory))
+                return BadRequest("Invalid path.");
+
+            if (Directory.Exists(sourceFullPath) &&
+                destinationFullPath.StartsWith(sourceFullPath + Path.DirectorySeparatorChar))
+            {
+                return BadRequest("Cannot copy a folder into itself or a subdirectory.");
+            }
+
+            if (System.IO.File.Exists(sourceFullPath))
+            {
+                System.IO.File.Copy(sourceFullPath, destinationFullPath, overwrite: true);
+            }
+            else if (Directory.Exists(sourceFullPath))
+            {
+                if (Directory.Exists(destinationFullPath))
+                    return BadRequest("Destination folder already exists.");
+
+                CopyDirectoryRecursive(sourceFullPath, destinationFullPath);
+            }
+            else
+            {
+                return NotFound("Source does not exist.");
+            }
+
+            return Ok();
+        }
+
+        private void CopyDirectoryRecursive(string sourceDir, string destDir)
+        {
+            Directory.CreateDirectory(destDir);
+
+            foreach (var file in Directory.GetFiles(sourceDir))
+            {
+                var destFile = Path.Combine(destDir, Path.GetFileName(file));
+                System.IO.File.Copy(file, destFile, overwrite: true);
+            }
+
+            foreach (var dir in Directory.GetDirectories(sourceDir))
+            {
+                var destSubDir = Path.Combine(destDir, Path.GetFileName(dir));
+                CopyDirectoryRecursive(dir, destSubDir);
+            }
+        }
     }
 }
