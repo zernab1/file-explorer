@@ -27,6 +27,22 @@
         .selected-folder:hover {
             background-color: #e0e9ed;
         }
+
+        .btn-delete {
+            color: red;
+            margin-left: 0.5rem;
+        }
+
+        .btn-move,
+        .btn-copy,
+        .btn-download {
+            margin-left: 0.5rem;
+        }
+
+        .folder .btn-delete {
+            margin-left: 0;
+            /* optional: override if needed for folders */
+        }
     </style>
 </head>
 
@@ -35,6 +51,7 @@
     <form id="upload-form">
         <input type="file" id="file-input" name="file" />
         <button type="submit">Upload</button>
+        <div id="upload-warning" style="color: red; margin-top: 0.5rem;"></div>
     </form>
     <div id="path"></div>
     <div id="contents"></div>
@@ -75,6 +92,10 @@
             return `${a.replace(/\/+$/, '')}/${b.replace(/^\/+/, '')}`;
         }
 
+        function sanitizePath(path) {
+            return path.replace(/^\/+/, '');
+        }
+
         function highlightSelection($element, path) {
             $('.item').removeClass('selected');
             $element.addClass('selected');
@@ -107,9 +128,10 @@
             folders.forEach(dir => {
                 const fullPath = joinPaths(path, dir.name);
 
-                const $folderDiv = $("<div>")
-                    .addClass("item folder selected-folder")
-                    .css("cursor", "pointer")
+                const $folderRow = $("<div>").addClass("item folder selected-folder");
+
+                const $folderLabel = $("<div>")
+                    .addClass("folder-label")
                     .text(`${Icons.folder} ${dir.name}`)
                     .on("click", () => {
                         const newPath = joinPaths(path, dir.name);
@@ -118,36 +140,38 @@
                         loadDirectory(newPath);
                     });
 
-                const $deleteFolderBtn = $("<button>")
+                const $deleteBtn = $("<button>")
+                    .addClass("btn-delete")
                     .text("Delete")
-                    .css({ marginLeft: "0.5rem", color: "red" })
                     .on("click", (e) => {
                         e.stopPropagation();
-                        highlightSelection($folderDiv, fullPath);
+                        highlightSelection($folderRow, fullPath);
                         if (confirm(`Delete folder "${dir.name}" and all its contents?`)) {
                             deleteItem(fullPath);
                         }
                     });
 
-                const $moveFolderBtn = $("<button>")
+                const $moveBtn = $("<button>")
+                    .addClass("btn-move")
                     .text("Move")
-                    .css({ marginLeft: "0.5rem" })
                     .on("click", (e) => {
                         e.stopPropagation();
-                        highlightSelection($folderDiv, fullPath);
+                        highlightSelection($folderRow, fullPath);
                         openMoveModal(fullPath);
                     });
 
-                const $copyFolderBtn = $("<button>")
+                const $copyBtn = $("<button>")
+                    .addClass("btn-copy")
                     .text("Copy")
-                    .css({ marginLeft: "0.5rem" })
                     .on("click", (e) => {
                         e.stopPropagation();
-                        highlightSelection($folderDiv, fullPath);
+                        highlightSelection($folderRow, fullPath);
                         openCopyModal(fullPath);
                     });
 
-                $folderDiv.append($deleteFolderBtn, $moveFolderBtn, $copyFolderBtn).appendTo($container);
+                $folderRow
+                    .append($folderLabel, $deleteBtn, $moveBtn, $copyBtn)
+                    .appendTo($container);
             });
         }
 
@@ -155,49 +179,56 @@
             files.forEach(file => {
                 const fullPath = joinPaths(path, file.name);
 
-                const $fileDiv = $("<div>")
-                    .addClass("item")
+                const $fileRow = $("<div>").addClass("item file");
+
+                const $fileLabel = $("<div>")
+                    .addClass("file-label")
                     .text(`${Icons.file} ${file.name} (${formatBytes(file.size)})`);
 
-                const $downloadBtn = $("<button>")
-                    .text("Download")
-                    .css({ marginLeft: "1rem" })
-                    .on("click", () => {
-                        window.location.href = `/api/fileexplorer/download?path=${encodeURIComponent(fullPath)}`;
-                    });
+                const $buttonGroup = $("<div>").addClass("button-group");
 
                 const $deleteBtn = $("<button>")
+                    .addClass("btn-delete")
                     .text("Delete")
-                    .css({ marginLeft: "0.5rem", color: "red" })
                     .on("click", (e) => {
                         e.stopPropagation();
-                        highlightSelection($fileDiv, fullPath);
+                        highlightSelection($fileRow, fullPath);
                         if (confirm(`Delete file "${file.name}"?`)) {
                             deleteItem(fullPath);
                         }
                     });
 
+                const $downloadBtn = $("<button>")
+                    .addClass("btn-download")
+                    .text("Download")
+                    .on("click", () => {
+                        window.location.href = `/api/fileexplorer/download?path=${encodeURIComponent(fullPath)}`;
+                    });
+
                 const $moveBtn = $("<button>")
+                    .addClass("btn-move")
                     .text("Move")
-                    .css({ marginLeft: "0.5rem" })
                     .on("click", (e) => {
                         e.stopPropagation();
-                        highlightSelection($fileDiv, fullPath);
+                        highlightSelection($fileRow, fullPath);
                         openMoveModal(fullPath);
                     });
 
                 const $copyBtn = $("<button>")
+                    .addClass("btn-copy")
                     .text("Copy")
-                    .css({ marginLeft: "0.5rem" })
                     .on("click", (e) => {
                         e.stopPropagation();
-                        highlightSelection($fileDiv, fullPath);
+                        highlightSelection($fileRow, fullPath);
                         openCopyModal(fullPath);
                     });
 
-                $fileDiv.append($deleteBtn, $downloadBtn, $moveBtn, $copyBtn).appendTo($container);
+                $buttonGroup.append($deleteBtn, $downloadBtn, $moveBtn, $copyBtn);
+                $fileRow.append($fileLabel, $buttonGroup).appendTo($container);
             });
         }
+
+
 
         function renderBreadcrumbs(path) {
             path = path.replace(/^\/|\/$/g, "");
@@ -244,7 +275,13 @@
             e.preventDefault();
 
             const fileInput = $('#file-input')[0];
-            if (fileInput.files.length === 0) return;
+            const warning = $('#upload-warning');
+            warning.text("");
+
+            if (fileInput.files.length === 0) {
+                warning.text("Please select a file before attempting to upload.");
+                return;
+            }
 
             const file = fileInput.files[0];
             const fileName = file.name;
@@ -296,7 +333,7 @@
         function performCopyOrMove() {
             const destPath = $("#confirm-modal").data("destPath");
             if (itemToCopy) {
-                $.post(`/api/fileexplorer/copy?sourcePath=${encodeURIComponent(itemToCopy)}&destinationPath=${encodeURIComponent(destPath)}`)
+                $.post(`/api/fileexplorer/move?sourcePath=${encodeURIComponent(sanitizePath(itemToCopy))}&destinationPath=${encodeURIComponent(sanitizePath(destPath))}`)
                     .done(() => {
                         alert("Successfully Copied!");
                         resetDirectoryModal();
@@ -306,7 +343,7 @@
                         alert("Copy failed: " + xhr.responseText);
                     });
             } else if (itemToMove) {
-                $.post(`/api/fileexplorer/move?sourcePath=${encodeURIComponent(itemToMove)}&destinationPath=${encodeURIComponent(destPath)}`)
+                $.post(`/api/fileexplorer/move?sourcePath=${encodeURIComponent(sanitizePath(itemToMove))}&destinationPath=${encodeURIComponent(sanitizePath(destPath))}`)
                     .done(() => {
                         alert("Successfully Moved!");
                         resetDirectoryModal();
@@ -345,7 +382,7 @@
                     const newPath = path === "/" ? dir.name : `${path}/${dir.name}`;
 
                     $("<div>")
-                        .addClass(".selected-folder")
+                        .addClass("selected-folder")
                         .text(`📂 ${dir.name}`)
                         .css("cursor", "pointer")
                         .on("click", function () {
