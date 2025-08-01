@@ -88,8 +88,6 @@ namespace FileExplorerApp.Controllers
         [HttpDelete("delete")]
         public IActionResult Delete([FromQuery] string path)
         {
-            _logger.LogInformation($"Delete request received for path: {path}");
-
             var fullPath = Path.GetFullPath(Path.Combine(_homeDirectory, path ?? string.Empty));
 
             if (!fullPath.StartsWith(Path.GetFullPath(_homeDirectory)))
@@ -117,7 +115,40 @@ namespace FileExplorerApp.Controllers
                 _logger.LogError(ex, "Failed to delete path: " + fullPath);
                 return StatusCode(500, $"Internal server error: {ex.Message}");
             }
+        }
 
+        [HttpPost("move")]
+        public IActionResult Move([FromQuery] string sourcePath, [FromQuery] string destinationPath)
+        {
+            var sourceFullPath = Path.GetFullPath(Path.Combine(_homeDirectory, sourcePath));
+            var destinationFullPath = Path.GetFullPath(Path.Combine(_homeDirectory, destinationPath, Path.GetFileName(sourceFullPath)));
+
+            if (!sourceFullPath.StartsWith(_homeDirectory) || !destinationFullPath.StartsWith(_homeDirectory))
+                return BadRequest("Invalid path.");
+
+            if (Directory.Exists(sourceFullPath) &&
+                destinationFullPath.StartsWith(sourceFullPath + Path.DirectorySeparatorChar))
+            {
+                return BadRequest("Cannot move a folder into itself or its own subfolder.");
+            }
+
+            if (System.IO.File.Exists(sourceFullPath))
+            {
+                System.IO.File.Move(sourceFullPath, destinationFullPath, overwrite: true);
+            }
+            else if (Directory.Exists(sourceFullPath))
+            {
+                if (Directory.Exists(destinationFullPath))
+                    return BadRequest("Destination folder already exists.");
+
+                Directory.Move(sourceFullPath, destinationFullPath);
+            }
+            else
+            {
+                return NotFound("Source not found.");
+            }
+
+            return Ok();
         }
     }
 }

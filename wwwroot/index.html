@@ -17,6 +17,16 @@
         .folder {
             font-weight: bold;
         }
+
+        .selected-folder {
+            background-color: #c9ebf6;
+            border-radius: 4px;
+            padding: 0.25rem;
+        }
+
+        .move-folder:hover {
+            background-color: #e0e9ed;
+        }
     </style>
 </head>
 
@@ -31,7 +41,9 @@
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script>
+        /// Constant and Global variables ///
         let currentPath = "/";
+        let itemToMove = null;
 
         const Icons = {
             folder: "📂",
@@ -40,14 +52,24 @@
             upload: "📤"
         };
 
+        /// Util Functions ///
         function formatBytes(bytes) {
             const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
             if (bytes === 0) return "0 Bytes";
             const i = Math.floor(Math.log(bytes) / Math.log(1024));
-            const size = bytes / Math.pow(1024, i);
-            return `${size.toFixed(2)} ${sizes[i]}`;
+            return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
         }
 
+        function clearSelection() {
+            $(".move-folder").removeClass("selected-folder");
+            $("#confirm-move").prop("disabled", true).removeData("destPath");
+        }
+
+        function joinPaths(a, b) {
+            return `${a.replace(/\/+$/, '')}/${b.replace(/^\/+/, '')}`;
+        }
+
+        /// Directory Rendering ///
         function loadDirectory(path = "") {
             currentPath = path || "/";
             const apiPath = currentPath === "/" ? "" : currentPath;
@@ -55,8 +77,7 @@
             $.getJSON(`/api/fileexplorer/${apiPath}`, function (data) {
                 $("#path").text(`Path: ${data.path}`);
 
-                const $contents = $("#contents");
-                $contents.empty();
+                const $contents = $("#contents").empty();
 
                 $("<div>")
                     .css("margin-bottom", "1rem")
@@ -64,142 +85,131 @@
                     .appendTo($contents);
 
                 renderBreadcrumbs(path);
-
-                data.directories.forEach(dir => {
-                    const $folderDiv = $("<div>")
-                        .addClass("directory item folder")
-                        .css("cursor", "pointer")
-                        .text(`${Icons.folder} ${dir.name}`)
-                        .on("click", () => {
-                            const newPath = path === "" || path === "/" ? dir.name : `${path}/${dir.name}`;
-                            history.pushState({ path: newPath }, "", `/?path=${encodeURIComponent(newPath)}`);
-                            currentPath = newPath;
-                            loadDirectory(newPath);
-                        });
-
-                    const $deleteFolderBtn = $("<button>")
-                        .text("Delete")
-                        .css({ marginLeft: "0.5rem", color: "red" })
-                        .on("click", (e) => {
-                            e.stopPropagation();
-                            if (confirm(`Delete folder "${dir.name}" and its contents?`)) {
-                                const deletePath = path ? `${path}/${dir.name}` : dir.name;
-                                $.ajax({
-                                    url: `/api/fileexplorer/delete?path=${encodeURIComponent(deletePath)}`,
-                                    type: "DELETE",
-                                    success: () => {
-                                        loadDirectory(currentPath);
-                                    },
-                                    error: (xhr) => {
-                                        alert("Delete failed: " + xhr.responseText);
-                                    }
-                                });
-                            }
-                        });
-
-                    $folderDiv.append($deleteFolderBtn);
-                    $folderDiv.appendTo($contents);
-
-                });
-
-                data.files.forEach(file => {
-                    const $fileDiv = $("<div>")
-                        .addClass("item")
-                        .text(`${Icons.file} ${file.name} (${formatBytes(file.size)})`);
-
-                    const $downloadBtn = $("<button>")
-                        .text(`${Icons.download}`)
-                        .css({ marginLeft: "1rem" })
-                        .on("click", () => {
-                            const downloadPath = path ? `${path}/${file.name}` : file.name;
-                            window.location.href = `/api/fileexplorer/download?path=${encodeURIComponent(downloadPath)}`;
-                        });
-
-                    const $deleteBtn = $("<button>")
-                        .text("Delete")
-                        .css({ marginLeft: "0.5rem", color: "red" })
-                        .on("click", () => {
-                            if (confirm(`Delete file "${file.name}"?`)) {
-                                const deletePath = path ? `${path}/${file.name}` : file.name;
-                                $.ajax({
-                                    url: `/api/fileexplorer/delete?path=${encodeURIComponent(deletePath)}`,
-                                    type: "DELETE",
-                                    success: () => {
-                                        loadDirectory(currentPath);
-                                    },
-                                    error: (xhr) => {
-                                        alert("Delete failed: " + xhr.responseText);
-                                    }
-                                });
-                            }
-                        });
-
-                    $fileDiv.append($deleteBtn);
-                    $fileDiv.append($downloadBtn);
-                    $fileDiv.appendTo($contents);
-                });
-
+                renderFolders(data.directories, path, $contents);
+                renderFiles(data.files, path, $contents);
             }).fail(() => {
-                $("#contents").html("<div>Error loading directory.</div>");
+                $("#contents").html("<div>Error rendering directory.</div>");
+            });
+        }
+
+        function renderFolders(folders, path, $container) {
+            folders.forEach(dir => {
+                const $folderDiv = $("<div>")
+                    .addClass("directory item folder")
+                    .css("cursor", "pointer")
+                    .text(`${Icons.folder} ${dir.name}`)
+                    .on("click", () => {
+                        const newPath = joinPaths(path, dir.name);
+                        history.pushState({ path: newPath }, "", `/?path=${encodeURIComponent(newPath)}`);
+                        currentPath = newPath;
+                        loadDirectory(newPath);
+                    });
+
+                const $deleteFolderBtn = $("<button>")
+                    .text("Delete")
+                    .css({ marginLeft: "0.5rem", color: "red" })
+                    .on("click", (e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete folder "${dir.name}" and all its contents?`)) {
+                            const deletePath = path ? `${path}/${dir.name}` : dir.name;
+                            deleteItem(deletePath);
+                        }
+                    });
+
+                const $moveFolderBtn = $("<button>")
+                    .text("Move")
+                    .css({ marginLeft: "0.5rem" })
+                    .on("click", (e) => {
+                        e.stopPropagation();
+                        const fullPath = path ? `${path}/${dir.name}` : dir.name;
+                        openMoveModal(fullPath);
+                    });
+
+                $folderDiv.append($deleteFolderBtn, $moveFolderBtn).appendTo($container);
+            });
+        }
+
+        function renderFiles(files, path, $container) {
+            files.forEach(file => {
+                const fullPath = path ? `${path}/${file.name}` : file.name;
+
+                const $fileDiv = $("<div>")
+                    .addClass("item")
+                    .text(`${Icons.file} ${file.name} (${formatBytes(file.size)})`);
+
+                const $downloadBtn = $("<button>")
+                    .text("Download")
+                    .css({ marginLeft: "1rem" })
+                    .on("click", () => {
+                        window.location.href = `/api/fileexplorer/download?path=${encodeURIComponent(fullPath)}`;
+                    });
+
+                const $deleteBtn = $("<button>")
+                    .text("Delete")
+                    .css({ marginLeft: "0.5rem", color: "red" })
+                    .on("click", () => {
+                        if (confirm(`Delete file "${file.name}"?`)) {
+                            deleteItem(fullPath);
+                        }
+                    });
+
+                const $moveBtn = $("<button>")
+                    .text("Move")
+                    .css({ marginLeft: "0.5rem" })
+                    .on("click", () => openMoveModal(fullPath));
+
+                $fileDiv.append($deleteBtn, $downloadBtn, $moveBtn).appendTo($container);
             });
         }
 
         function renderBreadcrumbs(path) {
             path = path.replace(/^\/|\/$/g, "");
-            const $pathDiv = $("#path");
-            $pathDiv.empty();
+            const $pathDiv = $("#path").empty();
 
-            const $home = $("<span>")
+            $("<span>")
                 .addClass("breadcrumb")
                 .css("cursor", "pointer")
                 .text("Home")
                 .on("click", () => {
                     history.pushState({ path: "/" }, "", "/");
                     loadDirectory("/");
-                });
-
-            $pathDiv.append($home);
+                }).appendTo($pathDiv);
 
             if (path) {
                 const parts = path.split("/");
-                let combinedPath = "";
                 parts.forEach((part, idx) => {
-                    combinedPath += (idx === 0 ? "" : "/") + part;
+                    const partPath = parts.slice(0, idx + 1).join("/");
                     $pathDiv.append(" / ");
-                    const $crumb = $("<span>")
+                    $("<span>")
                         .addClass("breadcrumb")
                         .css("cursor", "pointer")
                         .text(part)
                         .on("click", () => {
-                            history.pushState({ path: combinedPath }, "", `/?path=${encodeURIComponent(combinedPath)}`);
-                            loadDirectory(combinedPath);
-                        });
-                    $pathDiv.append($crumb);
+                            history.pushState({ path: partPath }, "", `/?path=${encodeURIComponent(partPath)}`);
+                            loadDirectory(partPath);
+                        }).appendTo($pathDiv);
                 });
             }
         }
 
-        $(document).ready(() => {
-            const params = new URLSearchParams(window.location.search);
-            const initialPath = params.get("path") || "";
-            loadDirectory(initialPath);
+        /// Deletion ///
+        function deleteItem(path) {
+            $.ajax({
+                url: `/api/fileexplorer/delete?path=${encodeURIComponent(path)}`,
+                type: "DELETE",
+                success: () => loadDirectory(currentPath),
+                error: (xhr) => alert("Delete failed: " + xhr.responseText)
+            });
+        }
 
-            window.onpopstate = function (event) {
-                const path = event.state?.path || "";
-                loadDirectory(path);
-            };
-        });
-
+        /// File Uploads ///
         $('#upload-form').on('submit', function (e) {
             e.preventDefault();
 
             const fileInput = $('#file-input')[0];
             if (fileInput.files.length === 0) return;
 
-            let uploadPath = currentPath;
-            if (!uploadPath || uploadPath === "/") {
-                uploadPath = "."; // telling backend this is the root directory
-            }
+            let uploadPath = currentPath === "/" ? "." : currentPath;
 
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
@@ -211,18 +221,100 @@
                 data: formData,
                 contentType: false,
                 processData: false,
-                success: function () {
+                success: () => {
                     alert('Upload successful!');
                     loadDirectory(currentPath);
                 },
-                error: function (xhr) {
-                    alert('Upload failed: ' + xhr.responseText);
+                error: (xhr) => alert('Upload failed: ' + xhr.responseText)
+            });
+        });
 
+        /// Move Functionality ///
+        function openMoveModal(sourcePath) {
+            itemToMove = sourcePath;
+            clearSelection();
+            $("#move-modal").show();
+            loadDestinationBrowser("/");
+        }
 
+        function loadDestinationBrowser(path) {
+            $.getJSON(`/api/fileexplorer/${path === "/" ? "" : path}`, function (data) {
+                const $browser = $("#destination-browser").empty();
+                $("<div>").text(`Current: ${path}`).css({ fontWeight: "bold", marginBottom: "0.5rem" }).appendTo($browser);
+
+                if (path !== "/") {
+                    const parentPath = path.split("/").slice(0, -1).join("/") || "/";
+                    $("<div>")
+                        .text("👈 Back ..")
+                        .css("cursor", "pointer")
+                        .on("click", () => {
+                            clearSelection();
+                            loadDestinationBrowser(parentPath);
+                        }).appendTo($browser);
                 }
+
+                data.directories.forEach(dir => {
+                    const newPath = path === "/" ? dir.name : `${path}/${dir.name}`;
+
+                    $("<div>")
+                        .addClass("move-folder")
+                        .text(`📂 ${dir.name}`)
+                        .css("cursor", "pointer")
+                        .on("click", function () {
+                            $(".move-folder").removeClass("selected-folder");
+                            $(this).addClass("selected-folder");
+                            $("#confirm-move").prop("disabled", false).data("destPath", newPath);
+                        })
+                        .on("dblclick", function () {
+                            clearSelection();
+                            loadDestinationBrowser(newPath);
+                        }).appendTo($browser);
+                });
+            });
+        }
+
+        /// Event Setup ///
+        $(document).ready(() => {
+            const params = new URLSearchParams(window.location.search);
+            const initialPath = params.get("path") || "";
+            loadDirectory(initialPath);
+
+            window.onpopstate = function (event) {
+                const path = event.state?.path || "";
+                loadDirectory(path);
+            };
+
+            $("#cancel-move").on("click", () => {
+                $("#move-modal").hide();
+                itemToMove = null;
+            });
+
+            $("#confirm-move").on("click", () => {
+                const destPath = $("#confirm-move").data("destPath");
+                if (!itemToMove || !destPath) return;
+
+                $.post(`/api/fileexplorer/move?sourcePath=${encodeURIComponent(itemToMove)}&destinationPath=${encodeURIComponent(destPath)}`)
+                    .done(() => {
+                        alert("Successfully Moved!");
+                        $("#move-modal").hide();
+                        loadDirectory(currentPath);
+                    })
+                    .fail((xhr) => {
+                        alert("Move failed: " + xhr.responseText);
+                    });
             });
         });
     </script>
+
+    <div id="move-modal" style="display:none; position:fixed; top:10%; left:50%; transform:translateX(-50%);
+    background:white; border:1px solid #ccc; padding:1rem; z-index:9999; max-height:80vh; overflow:auto;">
+        <h3>Select Destination</h3>
+        <div id="destination-browser"></div>
+        <div style="margin-top:1rem;">
+            <button id="confirm-move">Move Here</button>
+            <button id="cancel-move">Cancel</button>
+        </div>
+    </div>
 </body>
 
 </html>
