@@ -65,6 +65,19 @@ namespace FileExplorerApp.Controllers
             return PhysicalFile(fullPath, contentType, fileName);
         }
 
+        [HttpGet("exists")]
+        public IActionResult FileExists(string path, string filename)
+        {
+            if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(filename))
+                return BadRequest("Invalid path or filename.");
+
+            string fullPath = Path.Combine(_homeDirectory, path, filename);
+            bool exists = System.IO.File.Exists(fullPath);
+
+            return Ok(new { exists });
+        }
+
+
         [HttpPost("upload")]
         public async Task<IActionResult> Upload([FromForm] string path, [FromForm] IFormFile file)
         {

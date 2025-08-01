@@ -209,23 +209,34 @@
             const fileInput = $('#file-input')[0];
             if (fileInput.files.length === 0) return;
 
+            const file = fileInput.files[0];
+            const fileName = file.name;
             let uploadPath = currentPath === "/" ? "." : currentPath;
 
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            formData.append('path', uploadPath);
+            // Does file being uploaded already exist?
+            $.get('/api/fileexplorer/exists', { path: uploadPath, filename: fileName }, function (response) {
+                if (response.exists) {
+                    if (!confirm(`"${fileName}" already exists. Replace it?`)) {
+                        return;
+                    }
+                }
 
-            $.ajax({
-                url: '/api/fileexplorer/upload',
-                type: 'POST',
-                data: formData,
-                contentType: false,
-                processData: false,
-                success: () => {
-                    alert('Upload successful!');
-                    loadDirectory(currentPath);
-                },
-                error: (xhr) => alert('Upload failed: ' + xhr.responseText)
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('path', uploadPath);
+
+                $.ajax({
+                    url: '/api/fileexplorer/upload',
+                    type: 'POST',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    success: () => {
+                        alert('Upload successful!');
+                        loadDirectory(currentPath);
+                    },
+                    error: (xhr) => alert('Upload failed: ' + xhr.responseText)
+                });
             });
         });
 
