@@ -4,36 +4,38 @@
 <head>
     <meta charset="UTF-8" />
     <title>File Explorer</title>
+    <link rel="icon" type="image/png" href="/assets/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+    <link rel="shortcut icon" href="/assets/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png" />
     <link rel="stylesheet" href="styles/main.css" />
 </head>
 
 <body>
-    <h1>File Explorer</h1>
+     <h1>File Explorer</h1>
 
     <!-- Search Bar -->
-    <div id="search-container" style="margin-bottom: 1rem;">
+    <div id="search-container">
         <input type="text" id="search-input" placeholder="Search for files/folders..." />
         <button id="search-btn">Search</button>
-        <button id="clear-search" style="display:none;">Back to Folder View</button>
+        <button id="clear-search">Back to Directory View</button>
     </div>
-
 
     <!-- File Uploads -->
     <form id="upload-form">
         <input type="file" id="file-input" name="file" />
         <button type="submit">Upload</button>
-        <div id="upload-warning" style="color: red; margin-top: 0.5rem;"></div>
+        <div id="upload-warning"></div>
     </form>
 
     <div id="path"></div>
     <div id="contents"></div>
 
     <!-- Directory modal -->
-    <div id="directory-modal" style="display:none; position:fixed; top:10%; left:50%; transform:translateX(-50%);
-    background:white; border:1px solid #ccc; padding:1rem; z-index:9999; max-height:80vh; overflow:auto;">
-        <h3>Select Destination</h3>
+    <div id="directory-modal">
+        <div id="action-type-label"></div>
         <div id="destination-browser"></div>
-        <div style="margin-top:1rem;">
+        <div>
             <button id="confirm-modal" disabled>Confirm</button>
             <button id="cancel-modal">Cancel</button>
         </div>

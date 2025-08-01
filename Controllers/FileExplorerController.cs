@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.StaticFiles;
 
 namespace FileExplorerApp.Controllers
 {
@@ -8,84 +9,115 @@ namespace FileExplorerApp.Controllers
     {
         private readonly ILogger<FileExplorerController> _logger;
         private readonly string _homeDirectory;
+        private readonly string _basePath;
 
         public FileExplorerController(ILogger<FileExplorerController> logger, IConfiguration config)
         {
             _logger = logger;
-            _homeDirectory = config["HomeDirectory"] ?? "/Users/zernab/Documents";
+            _homeDirectory = config["HomeDirectory"];
+            _basePath = Path.GetFullPath(_homeDirectory);
         }
 
-         [HttpGet("search")]
-        public IActionResult Search([FromQuery] string q, [FromQuery] string? startPath = null)
+        private bool IsSafePath(string fullPath)
+        {
+            return fullPath.StartsWith(_basePath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(fullPath, _basePath, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [HttpGet("search")]
+        public IActionResult Search(string q)
         {
             if (string.IsNullOrWhiteSpace(q))
-                return BadRequest("Search query can't be empty.");
-
-            var rootPath = Path.GetFullPath(Path.Combine(_homeDirectory, startPath ?? string.Empty));
-            if (!rootPath.StartsWith(Path.GetFullPath(_homeDirectory)) || !Directory.Exists(rootPath))
-                return BadRequest("Invalid search path.");
-
-            var results = new List<object>();
+                return BadRequest("Query can't be empty!");
 
             try
             {
-                foreach (var dir in Directory.EnumerateDirectories(rootPath, "*", SearchOption.AllDirectories))
-                {
-                    if (Path.GetFileName(dir).Contains(q, StringComparison.OrdinalIgnoreCase))
+                var directories = Directory.EnumerateDirectories(_basePath, "*", SearchOption.AllDirectories)
+                    .Where(d => Path.GetFileName(d).Contains(q, StringComparison.OrdinalIgnoreCase))
+                    .Select(d => new
                     {
-                        results.Add(new
-                        {
-                            Name = Path.GetFileName(dir),
-                            Type = "Folder",
-                            Path = Path.GetRelativePath(_homeDirectory, dir)
-                        });
-                    }
-                }
+                        name = Path.GetFileName(d),
+                        path = d,
+                        size = (long?)null,
+                        type = "Folder"
+                    });
 
-                foreach (var file in Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories))
-                {
-                    if (Path.GetFileName(file).Contains(q, StringComparison.OrdinalIgnoreCase))
+                var files = Directory.EnumerateFiles(_basePath, "*", SearchOption.AllDirectories)
+                    .Where(f => Path.GetFileName(f).Contains(q, StringComparison.OrdinalIgnoreCase))
+                    .Select(f =>
                     {
-                        var info = new FileInfo(file);
-                        results.Add(new
+                        var info = new FileInfo(f);
+                        return new
                         {
-                            info.Name,
-                            Type = "File",
-                            Path = Path.GetRelativePath(_homeDirectory, file),
-                            Size = info.Length
-                        });
-                    }
-                }
+                            name = info.Name,
+                            path = f,
+                            size = (long?)info.Length,
+                            type = "File"
+                        };
+                    });
+
+                var results = directories.Concat(files).Take(100).ToList();
 
                 return Ok(new
                 {
-                    Query = q,
-                    ResultCount = results.Count,
-                    Results = results
+                    query = q,
+                    resultCount = results.Count,
+                    results
                 });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Search failed!");
-                return StatusCode(500, $"Serverside error: {ex.Message}");
+                return StatusCode(500, "Internal server error");
             }
+        }
+
+        [HttpGet]
+        public IActionResult GetRoot()
+        {
+            if (!Directory.Exists(_basePath))
+                return NotFound("Root directory not found!");
+
+            var directories = Directory.GetDirectories(_basePath).Select(dir => new
+            {
+                name = Path.GetFileName(dir)
+            });
+
+            var files = Directory.GetFiles(_basePath).Select(file =>
+            {
+                var info = new FileInfo(file);
+                return new
+                {
+                    name = info.Name,
+                    size = info.Length
+                };
+            }).ToList();
+
+            return Ok(new
+            {
+                path = "/",
+                directories,
+                files,
+                fileCount = files.Count,
+                folderCount = directories.Count(),
+                totalSizeBytes = files.Sum(f => f.size)
+            });
         }
 
         [HttpGet("{*path}")]
         public IActionResult Get(string? path)
         {
-            var fullPath = Path.GetFullPath(Path.Combine(_homeDirectory, path ?? string.Empty));
+            var fullPath = Path.GetFullPath(Path.Combine(_basePath, path ?? string.Empty));
 
-            // don't allow access outside defined home directory
-            if (!fullPath.StartsWith(Path.GetFullPath(_homeDirectory)))
+            if (!IsSafePath(fullPath))
                 return BadRequest("Access Denied.");
 
             if (!Directory.Exists(fullPath))
-                return NotFound("Directory not found");
+                return NotFound("Directory not found!");
 
             var directories = Directory.GetDirectories(fullPath).Select(dir => new
             {
-                Name = Path.GetFileName(dir)
+                name = Path.GetFileName(dir)
             });
 
             var files = Directory.GetFiles(fullPath).Select(file =>
@@ -93,30 +125,36 @@ namespace FileExplorerApp.Controllers
                 var info = new FileInfo(file);
                 return new
                 {
-                    info.Name,
-                    Size = info.Length
+                    name = info.Name,
+                    size = info.Length
                 };
             }).ToList();
 
             return Ok(new
             {
-                Path = path ?? "/",
-                Directories = directories,
-                Files = files,
-                FileCount = files.Count,
-                FolderCount = directories.Count(),
-                TotalSizeBytes = files.Sum(f => f.Size)
+                path = path ?? "/",
+                directories,
+                files,
+                fileCount = files.Count,
+                folderCount = directories.Count(),
+                totalSizeBytes = files.Sum(f => f.size)
             });
         }
 
         [HttpGet("download")]
         public IActionResult Download([FromQuery] string path)
         {
-            var fullPath = Path.GetFullPath(Path.Combine(_homeDirectory, path ?? string.Empty));
-            if (!fullPath.StartsWith(Path.GetFullPath(_homeDirectory)) || !System.IO.File.Exists(fullPath))
+            var fullPath = Path.GetFullPath(Path.Combine(_basePath, path ?? string.Empty));
+
+            if (!IsSafePath(fullPath) || !System.IO.File.Exists(fullPath))
                 return NotFound();
 
-            var contentType = "application/octet-stream"; // look into MIME mapping in .NET...
+            var provider = new FileExtensionContentTypeProvider();
+            if (!provider.TryGetContentType(fullPath, out var contentType))
+            {
+                contentType = "application/octet-stream";
+            }
+
             var fileName = Path.GetFileName(fullPath);
             return PhysicalFile(fullPath, contentType, fileName);
         }
@@ -127,22 +165,25 @@ namespace FileExplorerApp.Controllers
             if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(filename))
                 return BadRequest("Invalid path/filename.");
 
-            string fullPath = Path.Combine(_homeDirectory, path, filename);
-            bool exists = System.IO.File.Exists(fullPath);
+            var fullPath = Path.GetFullPath(Path.Combine(_basePath, path, filename));
 
+            if (!IsSafePath(fullPath))
+                return BadRequest("Access Denied.");
+
+            bool exists = System.IO.File.Exists(fullPath);
             return Ok(new { exists });
         }
-
 
         [HttpPost("upload")]
         public async Task<IActionResult> Upload([FromForm] string path, [FromForm] IFormFile file)
         {
-            var fullPath = Path.GetFullPath(Path.Combine(_homeDirectory, path ?? string.Empty));
-            if (!fullPath.StartsWith(Path.GetFullPath(_homeDirectory)) || !Directory.Exists(fullPath))
+            var fullPath = Path.GetFullPath(Path.Combine(_basePath, path ?? string.Empty));
+
+            if (!IsSafePath(fullPath) || !Directory.Exists(fullPath))
                 return BadRequest("Invalid upload path.");
 
             if (file == null || file.Length == 0)
-                return BadRequest("No file uploaded!");
+                return BadRequest("No file was uploaded!");
 
             var filePath = Path.Combine(fullPath, file.FileName);
 
@@ -157,9 +198,9 @@ namespace FileExplorerApp.Controllers
         [HttpDelete("delete")]
         public IActionResult Delete([FromQuery] string path)
         {
-            var fullPath = Path.GetFullPath(Path.Combine(_homeDirectory, path ?? string.Empty));
+            var fullPath = Path.GetFullPath(Path.Combine(_basePath, path ?? string.Empty));
 
-            if (!fullPath.StartsWith(Path.GetFullPath(_homeDirectory)))
+            if (!IsSafePath(fullPath))
                 return BadRequest("Access Denied.");
 
             try
@@ -176,7 +217,7 @@ namespace FileExplorerApp.Controllers
                 }
                 else
                 {
-                    return NotFound("File or directory not found.");
+                    return NotFound("The File or directory was not found.");
                 }
             }
             catch (Exception ex)
@@ -189,16 +230,16 @@ namespace FileExplorerApp.Controllers
         [HttpPost("move")]
         public IActionResult Move([FromQuery] string sourcePath, [FromQuery] string destinationPath)
         {
-            var sourceFullPath = Path.GetFullPath(Path.Combine(_homeDirectory, sourcePath));
-            var destinationFullPath = Path.GetFullPath(Path.Combine(_homeDirectory, destinationPath, Path.GetFileName(sourceFullPath)));
+            var sourceFullPath = Path.GetFullPath(Path.Combine(_basePath, sourcePath));
+            var destinationFullPath = Path.GetFullPath(Path.Combine(_basePath, destinationPath, Path.GetFileName(sourceFullPath)));
 
-            if (!sourceFullPath.StartsWith(_homeDirectory) || !destinationFullPath.StartsWith(_homeDirectory))
+            if (!IsSafePath(sourceFullPath) || !IsSafePath(destinationFullPath))
                 return BadRequest("Invalid path.");
 
             if (Directory.Exists(sourceFullPath) &&
-                destinationFullPath.StartsWith(sourceFullPath + Path.DirectorySeparatorChar))
+                destinationFullPath.StartsWith(sourceFullPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             {
-                return BadRequest("Can't move a folder into itself or its own subfolder.");
+                return BadRequest("Can't move a folder into itself or its own subfolder!");
             }
 
             if (System.IO.File.Exists(sourceFullPath))
@@ -208,7 +249,7 @@ namespace FileExplorerApp.Controllers
             else if (Directory.Exists(sourceFullPath))
             {
                 if (Directory.Exists(destinationFullPath))
-                    return BadRequest("Destination folder already exists.");
+                    return BadRequest("Destination folder already exists!");
 
                 Directory.Move(sourceFullPath, destinationFullPath);
             }
@@ -223,17 +264,17 @@ namespace FileExplorerApp.Controllers
         [HttpPost("copy")]
         public IActionResult Copy([FromQuery] string sourcePath, [FromQuery] string destinationPath)
         {
-            var sourceFullPath = Path.GetFullPath(Path.Combine(_homeDirectory, sourcePath));
-            var destinationDirectoryFullPath = Path.GetFullPath(Path.Combine(_homeDirectory, destinationPath));
+            var sourceFullPath = Path.GetFullPath(Path.Combine(_basePath, sourcePath));
+            var destinationDirectoryFullPath = Path.GetFullPath(Path.Combine(_basePath, destinationPath));
             var destinationFullPath = Path.Combine(destinationDirectoryFullPath, Path.GetFileName(sourceFullPath));
 
-            if (!sourceFullPath.StartsWith(_homeDirectory) || !destinationFullPath.StartsWith(_homeDirectory))
+            if (!IsSafePath(sourceFullPath) || !IsSafePath(destinationFullPath))
                 return BadRequest("Invalid path.");
 
             if (Directory.Exists(sourceFullPath) &&
-                destinationFullPath.StartsWith(sourceFullPath + Path.DirectorySeparatorChar))
+                destinationFullPath.StartsWith(sourceFullPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             {
-                return BadRequest("Cannot copy a folder into itself or its own subfolder.");
+                return BadRequest("Can't' copy a folder into itself or its own subfolder.");
             }
 
             if (System.IO.File.Exists(sourceFullPath))
@@ -243,9 +284,9 @@ namespace FileExplorerApp.Controllers
             else if (Directory.Exists(sourceFullPath))
             {
                 if (Directory.Exists(destinationFullPath))
-                    return BadRequest("Destination folder already exists.");
+                    return BadRequest("Destination folder already exists!");
 
-                CopyDirectoryRecursive(sourceFullPath, destinationFullPath);
+                CopyDirectoryRecursively(sourceFullPath, destinationFullPath);
             }
             else
             {
@@ -255,7 +296,7 @@ namespace FileExplorerApp.Controllers
             return Ok();
         }
 
-        private void CopyDirectoryRecursive(string sourceDir, string destDir)
+        private void CopyDirectoryRecursively(string sourceDir, string destDir)
         {
             Directory.CreateDirectory(destDir);
 
@@ -268,7 +309,7 @@ namespace FileExplorerApp.Controllers
             foreach (var dir in Directory.GetDirectories(sourceDir))
             {
                 var destSubDir = Path.Combine(destDir, Path.GetFileName(dir));
-                CopyDirectoryRecursive(dir, destSubDir);
+                CopyDirectoryRecursively(dir, destSubDir);
             }
         }
     }

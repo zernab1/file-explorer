@@ -1,37 +1,160 @@
 body {
     font-family: sans-serif;
+    margin: 1rem;
+    background-color: #f8fafc;
+    color: #1f2937;
 }
 
+#path {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* Items */
 .item {
-    margin: 0.5rem 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background-color: white;
     cursor: pointer;
 }
 
+.item:hover {
+    background-color: #f0f4f8;
+}
+
+.item.file:hover,
+.item.folder:hover {
+    background-color: #e8f1f8;
+}
+
+/* Selected Item are highlighted */
+.selected {
+    background-color: #cce9f9 !important;
+    font-weight: bold;
+}
+
+/* Folder-specific  */
 .folder {
     font-weight: bold;
 }
 
-.selected {
-    background-color: #c9ebf6;
-    border-radius: 4px;
-    padding: 0.25rem;
+/* First child: icon + filename (+ size if file) */
+.item > div:first-child {
+    flex-grow: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.95rem;
 }
 
-.selected-folder:hover {
-    background-color: #e0e9ed;
+/* trying to get consistent buttons for both files and folders...TODO */
+.button-group {
+    display: flex;
+    flex-shrink: 0;
 }
 
+.button-group button {
+    margin-left: 0.5rem;
+    padding: 0.3rem 0.75rem;
+    border: none;
+    border-radius: 5px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+/* Specific Button Types */
 .btn-delete {
-    color: red;
-    margin-left: 0.5rem;
+    background-color: #fee2e2;
+    color: #b91c1c;
 }
 
-.btn-move,
-.btn-copy,
+.btn-delete:hover {
+    background-color: #fecaca;
+}
+
+.btn-move {
+    background-color: #e0f2fe;
+    color: #0369a1;
+}
+
+.btn-move:hover {
+    background-color: #bae6fd;
+}
+.btn-copy {
+    background-color: #ede9fe;
+    color: #6b21a8;
+}
+.btn-copy:hover {
+    background-color: #ddd6fe;
+}
 .btn-download {
-    margin-left: 0.5rem;
+    background-color: #d1fae5;
+    color: #065f46;
 }
 
-.folder .btn-delete {
-    margin-left: 0;
+.btn-download:hover {
+    background-color: #a7f3d0;
+}
+
+/* Upload warning */
+#upload-warning {
+    color: #b91c1c;
+    margin-top: 0.5rem;
+    font-weight: bold;
+}
+
+/* Search Section */
+#search-container {
+    margin-bottom: 1rem;
+}
+
+#clear-search {
+    display: none;
+    margin-left: 0.5rem;
+    color: #6b7280;
+    cursor: pointer;
+}
+
+#clear-search:hover {
+    text-decoration: underline;
+}
+
+/* Modal Label */
+#action-type-label {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+/* Modal Container */
+#directory-modal {
+    background-color: white;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    padding: 1rem;
+    width: 90%;
+    max-width: 500px;
+    position: fixed;
+    top: 10%;
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+}
+
+/* Modal Confirm Button */
+#directory-modal > div:last-child {
+    margin-top: 1rem;
+    text-align: right;
+}
+
+/* Breadcrumbs */
+.breadcrumb {
+    color: #2563eb;
+    cursor: pointer;
+}
+
+.breadcrumb:hover {
+    text-decoration: underline;
 }
