@@ -1,0 +1,37 @@
+body {
+    font-family: sans-serif;
+}
+
+.item {
+    margin: 0.5rem 0;
+    cursor: pointer;
+}
+
+.folder {
+    font-weight: bold;
+}
+
+.selected {
+    background-color: #c9ebf6;
+    border-radius: 4px;
+    padding: 0.25rem;
+}
+
+.selected-folder:hover {
+    background-color: #e0e9ed;
+}
+
+.btn-delete {
+    color: red;
+    margin-left: 0.5rem;
+}
+
+.btn-move,
+.btn-copy,
+.btn-download {
+    margin-left: 0.5rem;
+}
+
+.folder .btn-delete {
+    margin-left: 0;
+}

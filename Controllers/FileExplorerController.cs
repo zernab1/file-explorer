@@ -15,6 +15,62 @@ namespace FileExplorerApp.Controllers
             _homeDirectory = config["HomeDirectory"] ?? "/Users/zernab/Documents";
         }
 
+         [HttpGet("search")]
+        public IActionResult Search([FromQuery] string q, [FromQuery] string? startPath = null)
+        {
+            if (string.IsNullOrWhiteSpace(q))
+                return BadRequest("Search query can't be empty.");
+
+            var rootPath = Path.GetFullPath(Path.Combine(_homeDirectory, startPath ?? string.Empty));
+            if (!rootPath.StartsWith(Path.GetFullPath(_homeDirectory)) || !Directory.Exists(rootPath))
+                return BadRequest("Invalid search path.");
+
+            var results = new List<object>();
+
+            try
+            {
+                foreach (var dir in Directory.EnumerateDirectories(rootPath, "*", SearchOption.AllDirectories))
+                {
+                    if (Path.GetFileName(dir).Contains(q, StringComparison.OrdinalIgnoreCase))
+                    {
+                        results.Add(new
+                        {
+                            Name = Path.GetFileName(dir),
+                            Type = "Folder",
+                            Path = Path.GetRelativePath(_homeDirectory, dir)
+                        });
+                    }
+                }
+
+                foreach (var file in Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories))
+                {
+                    if (Path.GetFileName(file).Contains(q, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var info = new FileInfo(file);
+                        results.Add(new
+                        {
+                            info.Name,
+                            Type = "File",
+                            Path = Path.GetRelativePath(_homeDirectory, file),
+                            Size = info.Length
+                        });
+                    }
+                }
+
+                return Ok(new
+                {
+                    Query = q,
+                    ResultCount = results.Count,
+                    Results = results
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Search failed!");
+                return StatusCode(500, $"Serverside error: {ex.Message}");
+            }
+        }
+
         [HttpGet("{*path}")]
         public IActionResult Get(string? path)
         {
@@ -22,7 +78,7 @@ namespace FileExplorerApp.Controllers
 
             // don't allow access outside defined home directory
             if (!fullPath.StartsWith(Path.GetFullPath(_homeDirectory)))
-                return BadRequest("Access denied.");
+                return BadRequest("Access Denied.");
 
             if (!Directory.Exists(fullPath))
                 return NotFound("Directory not found");
@@ -69,7 +125,7 @@ namespace FileExplorerApp.Controllers
         public IActionResult FileExists(string path, string filename)
         {
             if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(filename))
-                return BadRequest("Invalid path or filename.");
+                return BadRequest("Invalid path/filename.");
 
             string fullPath = Path.Combine(_homeDirectory, path, filename);
             bool exists = System.IO.File.Exists(fullPath);
@@ -86,7 +142,7 @@ namespace FileExplorerApp.Controllers
                 return BadRequest("Invalid upload path.");
 
             if (file == null || file.Length == 0)
-                return BadRequest("No file uploaded.");
+                return BadRequest("No file uploaded!");
 
             var filePath = Path.Combine(fullPath, file.FileName);
 
@@ -104,19 +160,19 @@ namespace FileExplorerApp.Controllers
             var fullPath = Path.GetFullPath(Path.Combine(_homeDirectory, path ?? string.Empty));
 
             if (!fullPath.StartsWith(Path.GetFullPath(_homeDirectory)))
-                return BadRequest("Access denied.");
+                return BadRequest("Access Denied.");
 
             try
             {
                 if (System.IO.File.Exists(fullPath))
                 {
                     System.IO.File.Delete(fullPath);
-                    return Ok("File deleted.");
+                    return Ok("File deleted successfully!");
                 }
                 else if (Directory.Exists(fullPath))
                 {
                     Directory.Delete(fullPath, true);
-                    return Ok("Directory deleted.");
+                    return Ok("Directory deleted successfully!");
                 }
                 else
                 {
@@ -142,7 +198,7 @@ namespace FileExplorerApp.Controllers
             if (Directory.Exists(sourceFullPath) &&
                 destinationFullPath.StartsWith(sourceFullPath + Path.DirectorySeparatorChar))
             {
-                return BadRequest("Cannot move a folder into itself or its own subfolder.");
+                return BadRequest("Can't move a folder into itself or its own subfolder.");
             }
 
             if (System.IO.File.Exists(sourceFullPath))
@@ -177,7 +233,7 @@ namespace FileExplorerApp.Controllers
             if (Directory.Exists(sourceFullPath) &&
                 destinationFullPath.StartsWith(sourceFullPath + Path.DirectorySeparatorChar))
             {
-                return BadRequest("Cannot copy a folder into itself or a subdirectory.");
+                return BadRequest("Cannot copy a folder into itself or its own subfolder.");
             }
 
             if (System.IO.File.Exists(sourceFullPath))
