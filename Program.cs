@@ -18,8 +18,6 @@ namespace FileExplorerApp {
             app.UseHttpsRedirection();
 
             app.UseStaticFiles();
-            
-            app.UseRouting(); // also adding this middleware to allow for "/" root usage instead of /index.html
 
             app.MapControllers();
 

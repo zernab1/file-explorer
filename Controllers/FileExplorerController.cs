@@ -72,38 +72,6 @@ namespace FileExplorerApp.Controllers
             }
         }
 
-        [HttpGet]
-        public IActionResult GetRoot()
-        {
-            if (!Directory.Exists(_basePath))
-                return NotFound("Root directory not found!");
-
-            var directories = Directory.GetDirectories(_basePath).Select(dir => new
-            {
-                name = Path.GetFileName(dir)
-            });
-
-            var files = Directory.GetFiles(_basePath).Select(file =>
-            {
-                var info = new FileInfo(file);
-                return new
-                {
-                    name = info.Name,
-                    size = info.Length
-                };
-            }).ToList();
-
-            return Ok(new
-            {
-                path = "/",
-                directories,
-                files,
-                fileCount = files.Count,
-                folderCount = directories.Count(),
-                totalSizeBytes = files.Sum(f => f.size)
-            });
-        }
-
         [HttpGet("{*path}")]
         public IActionResult Get(string? path)
         {
