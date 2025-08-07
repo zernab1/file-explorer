@@ -9,13 +9,11 @@ namespace FileExplorerApp.Controllers
     {
         private readonly ILogger<FileExplorerController> _logger;
         private readonly string _homeDirectory;
-        private readonly string _basePath;
 
         public FileExplorerController(ILogger<FileExplorerController> logger, IConfiguration config)
         {
             _logger = logger;
-            _homeDirectory = config["HomeDirectory"];
-            _basePath = Path.GetFullPath(_homeDirectory);
+            _homeDirectory = Path.GetFullPath(config["HomeDirectory"]);
         }
 
         [HttpGet("search")]
@@ -26,7 +24,7 @@ namespace FileExplorerApp.Controllers
 
             try
             {
-                var directories = Directory.EnumerateDirectories(_basePath, "*", SearchOption.AllDirectories)
+                var directories = Directory.EnumerateDirectories(_homeDirectory, "*", SearchOption.AllDirectories)
                     .Where(d => Path.GetFileName(d).Contains(q, StringComparison.OrdinalIgnoreCase))
                     .Select(d => new
                     {
@@ -36,7 +34,7 @@ namespace FileExplorerApp.Controllers
                         type = "Folder"
                     });
 
-                var files = Directory.EnumerateFiles(_basePath, "*", SearchOption.AllDirectories)
+                var files = Directory.EnumerateFiles(_homeDirectory, "*", SearchOption.AllDirectories)
                     .Where(f => Path.GetFileName(f).Contains(q, StringComparison.OrdinalIgnoreCase))
                     .Select(f =>
                     {
@@ -50,7 +48,7 @@ namespace FileExplorerApp.Controllers
                         };
                     });
 
-                var results = directories.Concat(files).Take(100).ToList();
+                var results = directories.Concat(files).Take(100).ToList(); // combined files and directories that match search
 
                 return Ok(new
                 {
@@ -69,14 +67,14 @@ namespace FileExplorerApp.Controllers
         [HttpGet("{*path}")]
         public IActionResult Get(string? path)
         {
-            var fullPath = Path.GetFullPath(Path.Combine(_basePath, path ?? string.Empty));
+            var fullPath = Path.GetFullPath(Path.Combine(_homeDirectory, path ?? string.Empty));
 
             if (!Directory.Exists(fullPath))
                 return NotFound("Directory not found!");
 
             var directories = Directory.GetDirectories(fullPath).Select(dir => new
             {
-                name = Path.GetFileName(dir)
+                name = Path.GetFileName(dir) // names of all immediate subdirectories
             });
 
             var files = Directory.GetFiles(fullPath).Select(file =>
@@ -87,7 +85,7 @@ namespace FileExplorerApp.Controllers
                     name = info.Name,
                     size = info.Length
                 };
-            }).ToList();
+            }).ToList(); // names and sizes of all immediate files
 
             return Ok(new
             {
@@ -103,7 +101,7 @@ namespace FileExplorerApp.Controllers
         [HttpGet("download")]
         public IActionResult Download([FromQuery] string path)
         {
-            var fullPath = Path.GetFullPath(Path.Combine(_basePath, path ?? string.Empty));
+            var fullPath = Path.GetFullPath(Path.Combine(_homeDirectory, path ?? string.Empty));
 
             if (!System.IO.File.Exists(fullPath))
                 return NotFound();
@@ -111,20 +109,21 @@ namespace FileExplorerApp.Controllers
             var provider = new FileExtensionContentTypeProvider();
             if (!provider.TryGetContentType(fullPath, out var contentType))
             {
-                contentType = "application/octet-stream";
+                contentType = "application/octet-stream"; // fallback to arbitrary binary data
             }
 
             var fileName = Path.GetFileName(fullPath);
             return PhysicalFile(fullPath, contentType, fileName);
         }
 
+        // Used for safety check prior to file uploads
         [HttpGet("exists")]
         public IActionResult FileExists(string path, string filename)
         {
             if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(filename))
                 return BadRequest("Invalid path/filename.");
 
-            var fullPath = Path.GetFullPath(Path.Combine(_basePath, path, filename));
+            var fullPath = Path.GetFullPath(Path.Combine(_homeDirectory, path, filename));
 
             bool exists = System.IO.File.Exists(fullPath);
             return Ok(new { exists });
@@ -133,7 +132,7 @@ namespace FileExplorerApp.Controllers
         [HttpPost("upload")]
         public async Task<IActionResult> Upload([FromForm] string path, [FromForm] IFormFile file)
         {
-            var fullPath = Path.GetFullPath(Path.Combine(_basePath, path ?? string.Empty));
+            var fullPath = Path.GetFullPath(Path.Combine(_homeDirectory, path ?? string.Empty));
 
             if (!Directory.Exists(fullPath))
                 return BadRequest("Invalid upload path.");
@@ -154,7 +153,7 @@ namespace FileExplorerApp.Controllers
         [HttpDelete("delete")]
         public IActionResult Delete([FromQuery] string path)
         {
-            var fullPath = Path.GetFullPath(Path.Combine(_basePath, path ?? string.Empty));
+            var fullPath = Path.GetFullPath(Path.Combine(_homeDirectory, path ?? string.Empty));
 
             try
             {
@@ -183,8 +182,8 @@ namespace FileExplorerApp.Controllers
         [HttpPost("move")]
         public IActionResult Move([FromQuery] string sourcePath, [FromQuery] string destinationPath)
         {
-            var sourceFullPath = Path.GetFullPath(Path.Combine(_basePath, sourcePath));
-            var destinationFullPath = Path.GetFullPath(Path.Combine(_basePath, destinationPath, Path.GetFileName(sourceFullPath)));
+            var sourceFullPath = Path.GetFullPath(Path.Combine(_homeDirectory, sourcePath));
+            var destinationFullPath = Path.GetFullPath(Path.Combine(_homeDirectory, destinationPath, Path.GetFileName(sourceFullPath)));
 
             if (Directory.Exists(sourceFullPath) &&
                 destinationFullPath.StartsWith(sourceFullPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
@@ -194,7 +193,7 @@ namespace FileExplorerApp.Controllers
 
             if (System.IO.File.Exists(sourceFullPath))
             {
-                System.IO.File.Move(sourceFullPath, destinationFullPath, overwrite: true);
+                System.IO.File.Move(sourceFullPath, destinationFullPath, overwrite: true); // TODO: ask user if they want to overwrite with file being moved
             }
             else if (Directory.Exists(sourceFullPath))
             {
@@ -214,9 +213,8 @@ namespace FileExplorerApp.Controllers
         [HttpPost("copy")]
         public IActionResult Copy([FromQuery] string sourcePath, [FromQuery] string destinationPath)
         {
-            var sourceFullPath = Path.GetFullPath(Path.Combine(_basePath, sourcePath));
-            var destinationDirectoryFullPath = Path.GetFullPath(Path.Combine(_basePath, destinationPath));
-            var destinationFullPath = Path.Combine(destinationDirectoryFullPath, Path.GetFileName(sourceFullPath));
+            var sourceFullPath = Path.GetFullPath(Path.Combine(_homeDirectory, sourcePath));
+            var destinationFullPath = Path.GetFullPath(Path.Combine(_homeDirectory, destinationPath, Path.GetFileName(sourceFullPath)));
 
             if (Directory.Exists(sourceFullPath) &&
                 destinationFullPath.StartsWith(sourceFullPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
@@ -226,7 +224,7 @@ namespace FileExplorerApp.Controllers
 
             if (System.IO.File.Exists(sourceFullPath))
             {
-                System.IO.File.Copy(sourceFullPath, destinationFullPath, overwrite: true);
+                System.IO.File.Copy(sourceFullPath, destinationFullPath, overwrite: true); // TODO: ask user if they want to overwrite with file being copied
             }
             else if (Directory.Exists(sourceFullPath))
             {

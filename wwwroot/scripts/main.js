@@ -9,7 +9,6 @@
     let currentPath = "/";
     let itemToMove = null;
     let itemToCopy = null;
-    let selectedItemPath = null;
 
     /// Utility Functions ///
     function formatBytes(bytes) {
@@ -40,13 +39,11 @@
     function clearAllSelection() {
         clearModalSelection();
         $(".item").removeClass("selected");
-        selectedItemPath = null;
     }
 
     function highlightSelection($el, path) {
         $(".item, .selected-folder").removeClass("selected");
         $el.addClass("selected");
-        selectedItemPath = path;
     }
 
     /// Search ///
