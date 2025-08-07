@@ -65,7 +65,6 @@
             if (folders.length) {
                 $("<div>")
                     .text(`${Icons.folder} Folders:`)
-                    .css("margin-top", "1rem")
                     .appendTo($contents);
 
                 folders.forEach((dir) => {
@@ -83,7 +82,6 @@
             if (files.length) {
                 $("<div>")
                     .text(`${Icons.file} Files:`)
-                    .css("margin-top", "1rem")
                     .appendTo($contents);
 
                 files.forEach((file) => {
@@ -110,7 +108,6 @@
                 const $contents = $("#contents").empty();
 
                 $("<div>")
-                    .css("margin-bottom", "1rem")
                     .text(
                         `${Icons.file} ${data.fileCount} files, ${Icons.folder} ${data.folderCount} folders, ${formatBytes(
                             data.totalSizeBytes
@@ -363,7 +360,6 @@
             const $browser = $("#destination-browser").empty();
             $("<div>")
                 .text(`Current Directory: ${path}`)
-                .css({ fontWeight: "bold", marginBottom: "0.5rem" })
                 .appendTo($browser);
 
             if (path !== "/") {
