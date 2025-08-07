@@ -18,12 +18,6 @@ namespace FileExplorerApp.Controllers
             _basePath = Path.GetFullPath(_homeDirectory);
         }
 
-        private bool IsSafePath(string fullPath)
-        {
-            return fullPath.StartsWith(_basePath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(fullPath, _basePath, StringComparison.OrdinalIgnoreCase);
-        }
-
         [HttpGet("search")]
         public IActionResult Search(string q)
         {
@@ -77,9 +71,6 @@ namespace FileExplorerApp.Controllers
         {
             var fullPath = Path.GetFullPath(Path.Combine(_basePath, path ?? string.Empty));
 
-            if (!IsSafePath(fullPath))
-                return BadRequest("Access Denied.");
-
             if (!Directory.Exists(fullPath))
                 return NotFound("Directory not found!");
 
@@ -114,7 +105,7 @@ namespace FileExplorerApp.Controllers
         {
             var fullPath = Path.GetFullPath(Path.Combine(_basePath, path ?? string.Empty));
 
-            if (!IsSafePath(fullPath) || !System.IO.File.Exists(fullPath))
+            if (!System.IO.File.Exists(fullPath))
                 return NotFound();
 
             var provider = new FileExtensionContentTypeProvider();
@@ -135,9 +126,6 @@ namespace FileExplorerApp.Controllers
 
             var fullPath = Path.GetFullPath(Path.Combine(_basePath, path, filename));
 
-            if (!IsSafePath(fullPath))
-                return BadRequest("Access Denied.");
-
             bool exists = System.IO.File.Exists(fullPath);
             return Ok(new { exists });
         }
@@ -147,7 +135,7 @@ namespace FileExplorerApp.Controllers
         {
             var fullPath = Path.GetFullPath(Path.Combine(_basePath, path ?? string.Empty));
 
-            if (!IsSafePath(fullPath) || !Directory.Exists(fullPath))
+            if (!Directory.Exists(fullPath))
                 return BadRequest("Invalid upload path.");
 
             if (file == null || file.Length == 0)
@@ -167,9 +155,6 @@ namespace FileExplorerApp.Controllers
         public IActionResult Delete([FromQuery] string path)
         {
             var fullPath = Path.GetFullPath(Path.Combine(_basePath, path ?? string.Empty));
-
-            if (!IsSafePath(fullPath))
-                return BadRequest("Access Denied.");
 
             try
             {
@@ -200,9 +185,6 @@ namespace FileExplorerApp.Controllers
         {
             var sourceFullPath = Path.GetFullPath(Path.Combine(_basePath, sourcePath));
             var destinationFullPath = Path.GetFullPath(Path.Combine(_basePath, destinationPath, Path.GetFileName(sourceFullPath)));
-
-            if (!IsSafePath(sourceFullPath) || !IsSafePath(destinationFullPath))
-                return BadRequest("Invalid path.");
 
             if (Directory.Exists(sourceFullPath) &&
                 destinationFullPath.StartsWith(sourceFullPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
@@ -235,9 +217,6 @@ namespace FileExplorerApp.Controllers
             var sourceFullPath = Path.GetFullPath(Path.Combine(_basePath, sourcePath));
             var destinationDirectoryFullPath = Path.GetFullPath(Path.Combine(_basePath, destinationPath));
             var destinationFullPath = Path.Combine(destinationDirectoryFullPath, Path.GetFileName(sourceFullPath));
-
-            if (!IsSafePath(sourceFullPath) || !IsSafePath(destinationFullPath))
-                return BadRequest("Invalid path.");
 
             if (Directory.Exists(sourceFullPath) &&
                 destinationFullPath.StartsWith(sourceFullPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
