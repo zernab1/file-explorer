@@ -14,8 +14,8 @@
     function formatBytes(bytes) {
         const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
         if (bytes === 0) return "0 Bytes";
-        const i = Math.floor(Math.log(bytes) / Math.log(1024));
-        return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
+        const i = Math.floor(Math.log(bytes) / Math.log(1024)); // determine unit type
+        return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`; // 1024 bytes = 1 KB
     }
 
     function joinPaths(a, b) {
@@ -27,7 +27,7 @@
         return path || ".";
     }
 
-    function sanitizePath(path) {
+    function removeLeadingSlashes(path) {
         return path.replace(/^\/+/, "");
     }
 
@@ -192,7 +192,7 @@
 
     /// Breadcrumbs ///
     function renderBreadcrumbs(path) {
-        sanitizePath(path)
+        removeLeadingSlashes(path)
         const $pathDiv = $("#path").empty();
 
         $("<span>")
@@ -243,7 +243,7 @@
             warning.text("");
 
             if (fileInput.files.length === 0) {
-                warning.text("Please select a file before attempting to upload.");
+                warning.text("Please select a file before attempting to upload!");
                 return;
             }
 
@@ -318,8 +318,8 @@
 
         if (itemToCopy) {
             $.post(
-                `/api/fileexplorer/copy?sourcePath=${encodeURIComponent(sanitizePath(itemToCopy))}&destinationPath=${encodeURIComponent(
-                    sanitizePath(destPath)
+                `/api/fileexplorer/copy?sourcePath=${encodeURIComponent(removeLeadingSlashes(itemToCopy))}&destinationPath=${encodeURIComponent(
+                    removeLeadingSlashes(destPath)
                 )}`
             )
                 .done(() => {
@@ -332,8 +332,8 @@
                 });
         } else if (itemToMove) {
             $.post(
-                `/api/fileexplorer/move?sourcePath=${encodeURIComponent(sanitizePath(itemToMove))}&destinationPath=${encodeURIComponent(
-                    sanitizePath(destPath)
+                `/api/fileexplorer/move?sourcePath=${encodeURIComponent(removeLeadingSlashes(itemToMove))}&destinationPath=${encodeURIComponent(
+                    removeLeadingSlashes(destPath)
                 )}`
             )
                 .done(() => {
@@ -402,9 +402,11 @@
 
         const params = new URLSearchParams(window.location.search);
         const initialPath = params.get("path") || "";
+
+        // Load directory contents for initialPath from URL (for deep linking)
         loadDirectory(initialPath);
 
-        window.onpopstate = (event) => {
+        window.onpopstate = (event) => { // Handles back/forward navigation events
             const path = event.state?.path || "";
             loadDirectory(path);
         };
